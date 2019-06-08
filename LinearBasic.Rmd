@@ -1,0 +1,148 @@
+---
+title: "Linear Regression"
+author: "Billy"
+date: "June 7, 2019"
+output: html_document
+runtime: shiny
+---
+
+##**1. Background**
+**Regression* analysis is a technique that typically uses continuous predictor variable(s) (that is, regressor variables) to predict the variation in a continuous response variable.
+Regression analysis uses the method of least squares to determine the values of the linear regression coefficients and the corresponding model.
+Linear regression is commonly used to quantify the relationship between two or more variables. It is also used to adjust for confounding.
+
+**The method of least squares* is a technique for estimating a parameter that minimizes the sum of the squared differences between the observed and the predicted values derived from the model. These differences are known as residuals or experimental errors. Experimental errors associated with individual observations are assumed to be independent and normally distributed. It should be noted that analysis of variance, regression analysis, and analysis of covariance are all based
+on the method of least squares.
+
+**The linear regression equation* is a mathematical function or model that indicates the linear relationship between a set of predictor variables and a response variable.
+Linear regression coefficients are numbers associated with each predictor variable in a linear regression equation that tell how the response variable changes with each unit increase in the predictor variable. The model also gives some sense of the degree of linearity present in the data.
+
+##**2. Case study: Money Ball**
+Moneyball: The Art of Winning an Unfair Game is a book by Michael Lewis about the Oakland Athletics (A’s) baseball team and its general manager, the person tasked with building the team, Billy Beane.
+* Scouts, a method for finding low cost players that data predicted would help the team win. Today, this strategy has been adapted by most baseball teams.
+**Method for this case study**
+* Objective: 
+  + using the regression analysis which help to develop strategies to build a competitive baseball team with a constrained budget.
+  + determine low cost player but high performance
+* Scope: scoring runs
+* Out of scope: 2 other important aspects:
++ Pitching
++ Fielding
+* Action: divided into 2 separate data:
+1) to determine which recorded player-specific statistics predict runs.
+2) to examine if players were undervalued based on what our first analysis predicts.
+
+###**2.1 Baseball basics**
+Baseball goal:
+* Score more runs (points) than other team.
+* Each team has 9 batters which have an opportuntity to hit a ball with a bat in a predetermined order.
+* A better who goes around the bases and arrives home, scores a run.
+* 5 ways to make an run:
+  + Bases on balls (BB) - the pitcher throw the ball out of a predefined area.
+  + Single - Batter hits ball & gets to first base.
+  + Double (2B) - Batter hits the ball and gets to second base.
+  + Triple (3B) - Batter hits the ball and gets to third base.
+  + Home Run (HR) - Batter hits the ball and goes all the way home and scores a run.
+```{r}
+library(Lahman)
+```
+
+
+
+
+
+##**2. Case study: is height hereditary?**
+```{r, eval=FALSE}
+library(tidyverse)
+library(corrplot)
+library(caret)
+library(HistData)
+data("GaltonFamilies")
+```
+
+```{r, eval=FALSE}
+str(GaltonFamilies)
+```
+
+```{r}
+set.seed(1983)
+galton_heights <- GaltonFamilies %>%
+  filter(gender == "male") %>%
+  group_by(family) %>%
+  sample_n(1) %>%
+  ungroup() %>%
+  select(father, childHeight) %>%
+  rename(son = childHeight)
+summary(galton_heights)
+```
+
+```{r}
+galton_heights %>%
+  summarize(mean(father), sd(father),
+            mean(son), sd(son)) %>% mutate_if(is.numeric, round, 1)
+```
+
+```{r, eval=FALSE}
+fit <- lm(son ~ father,
+          data = galton_heights)
+a <- as.character(round(fit$coefficients[2],2))
+b <- as.character(round(fit$coefficients[1],2))
+r2 <- as.character(round(summary(fit)$r.squared,2))
+eq <- as.character(paste("y = ",a,"x + ",b,", R-squared = ",r2))
+eq
+```
+
+```{r}
+galton_heights %>%
+  ggplot(aes(father, son)) +
+  geom_point(alpha = 0.5,
+             color = "orange")+
+  geom_smooth(method = "lm", color = "black") +
+  labs(title ="father and son regression",
+       subtitle = eq) +
+  theme_classic()
+```
+
+###**2.1 Correlation coefficient**
+The sample correlation coefficient r is a statistic that measures the degree of linear relationship between two sets of numbers and is computed as:
+r = Sxy / sqrt(Sxx.Sxy)
+```{r}
+galton_heights %>% summarize(r = cor(father, son)) %>% pull(r)
+```
+
+Sample correlation is a random variable
+```{r}
+R <- sample_n(galton_heights, 25, replace = TRUE) %>%
+  summarize(r = cor(father, son))
+R
+```
+
+Monte Carlo simulation
+```{r}
+B <- 1000
+N <- 25
+R <- replicate(B, {
+  sample_n(galton_heights, N, replace = TRUE) %>% 
+    summarize(r=cor(father, son)) %>% 
+    pull(r)
+})
+qplot(R, geom = "histogram", binwidth = 0.05, color = I("black"))
+```
+
+```{r}
+round(mean(R),3)
+```
+
+```{r}
+round(sd(R),3)
+```
+
+```{r}
+data.frame(R) %>%
+  ggplot(aes(sample = R)) +
+  stat_qq() +
+  geom_abline(intercept = mean(R),
+              slope = sqrt((1 - mean(R)^2)/(N-2)))+
+  theme_classic()
+```
+
