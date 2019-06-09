@@ -3,7 +3,6 @@ title: "Linear Regression"
 author: "Billy"
 date: "June 7, 2019"
 output: html_document
-runtime: shiny
 ---
 
 ##**1. Background**
@@ -43,8 +42,125 @@ Baseball goal:
   + Double (2B) - Batter hits the ball and gets to second base.
   + Triple (3B) - Batter hits the ball and gets to third base.
   + Home Run (HR) - Batter hits the ball and goes all the way home and scores a run.
-```{r}
+```{r, echo = TRUE}
+library(tidyverse)
+library(corrplot)
+library(caret)
 library(Lahman)
+Teams %>% 
+  filter(yearID %in% 1961:2001) %>%
+  mutate(HR_per_game = HR / G,
+         R_per_game = R/G) %>%
+  ggplot(aes(HR_per_game,R_per_game)) +
+  geom_point(alpha = 0.5)
+```
+
+```{r, echo = TRUE}
+df <- Teams %>% filter(yearID %in% 1961:2001) %>%
+  mutate(HR_per_game = HR/G,
+         R_per_game = R/G,
+         BB_per_game = BB/G,
+         X1B_per_game = (H-HR-X2B-X3B)/G,
+         X2B_per_game = X2B/G,
+         X3B_per_game = X3B/G,
+         SB_per_game = SB/G) %>%
+  select(yearID,teamID,Rank,HR_per_game,R_per_game, BB_per_game, X1B_per_game, X2B_per_game, X3B_per_game, SB_per_game)
+```
+
+```{r}
+library(lubridate)
+df %>% group_by(yearID) %>% 
+  mutate(avg_BB = median(BB_per_game),
+         avg_HR = median(HR_per_game)) %>% 
+  ggplot(aes(x = yearID,y = avg_HR)) +
+  geom_line(color = "blue")+
+  geom_line(aes(x = yearID, y = avg_BB), color = "orange")
+```
+
+```{r}
+library(psych)
+describe(df)
+```
+
+The objective of baseball is getting more runs (points) than the others. What is the most success contribute to Run per game? 
+```{r}
+df %>% gather("HR_per_game",
+              "BB_per_game",
+              "X1B_per_game",
+              "X2B_per_game",
+              "X3B_per_game",
+              "SB_per_game",
+              key = "Run_type",
+              value = "Run") %>%
+  mutate(Run_type = reorder(Run_type,
+                            Run,
+                            FUN = median)) %>%
+  ggplot(aes(x = Run_type,
+             y = Run,
+             fill = Run_type)) +
+  geom_boxplot()
+```
+
+```{r}
+df %>% gather("HR_per_game",
+              "BB_per_game",
+              "X1B_per_game",
+              "X2B_per_game",
+              "X3B_per_game",
+              "SB_per_game",
+              key = "Run_type",
+              value = "Run") %>%
+  ggplot(aes(x = Run,
+             y = R_per_game,
+             fill = factor(Run_type))) +
+  geom_point(aes(color = Run_type),alpha = 0.5) +
+  geom_smooth(method = "gam") +
+  theme_classic() +
+  theme(legend.position = "none",
+        ) +
+  facet_wrap(.~Run_type, scales = "free_x")
+
+```
+
+
+```{r}
+fit_lm <- lm(R_per_game~ 
+               HR_per_game +
+               BB_per_game +
+               X1B_per_game +
+               X2B_per_game +
+               X3B_per_game +
+               SB_per_game,
+             data = df)
+summary(fit_lm)
+hist(fit_lm$residuals)
+fit_lm$coefficients
+```
+
+The Least Squared Estimation is a realization of random variables, which expected value is 0, and standard deviation sigma. To see this, we will run a Monte Carlo simulation with 1000 replication, random sample size N = 50 and compute regression slope coefficient for each one.
+```{r}
+B <- 1000
+N <- 50
+lse <- replicate(B, {
+  sample_n(df, N, replace = TRUE) %>%
+    lm(R_per_game~ 
+               HR_per_game +
+               BB_per_game +
+               X1B_per_game +
+               X2B_per_game +
+               X3B_per_game +
+               SB_per_game,
+             data = .) %>%
+    .$coef
+})
+lse <- data.frame(beta_0 = lse[1,], beta_1 = lse[2,]) 
+```
+
+```{r}
+library(gridExtra)
+p1 <- lse %>% ggplot(aes(beta_0)) + geom_histogram(binwidth = 0.2, color = "black") 
+p2 <- lse %>% ggplot(aes(beta_1)) + geom_histogram(binwidth = 0.1, color = "black") 
+grid.arrange(p1, p2, ncol = 2)
 ```
 
 
@@ -53,9 +169,6 @@ library(Lahman)
 
 ##**2. Case study: is height hereditary?**
 ```{r, eval=FALSE}
-library(tidyverse)
-library(corrplot)
-library(caret)
 library(HistData)
 data("GaltonFamilies")
 ```
@@ -102,6 +215,25 @@ galton_heights %>%
        subtitle = eq) +
   theme_classic()
 ```
+
+```{r}
+rss <- function(beta0, beta1, data){
+  resid <- galton_heights$son - (beta0+beta1*galton_heights$father)
+  return(sum(resid^2))
+}
+
+beta1 = seq(0,1, len=nrow(galton_heights))
+results <- data.frame(beta1 = beta1,
+                      rss = sapply(beta1, rss, beta0 = 25))
+results %>% ggplot(aes(beta1, rss)) + geom_line() + 
+  geom_line(aes(beta1, rss), col=2)
+which.min(results$rss)
+```
+
+```{r}
+
+```
+
 
 ###**2.1 Correlation coefficient**
 The sample correlation coefficient r is a statistic that measures the degree of linear relationship between two sets of numbers and is computed as:
